@@ -69,9 +69,9 @@ public class ProfitableTransactionSelector implements PluginTransactionSelector 
     }
   }
 
-  @VisibleForTesting protected static Set<Hash> unprofitableCache = new LinkedHashSet<>();
-  protected static Map<Phase, Double> lastBlockMinRatios = new EnumMap<>(Phase.class);
-  protected static Map<Phase, Double> lastBlockMaxRatios = new EnumMap<>(Phase.class);
+  @VisibleForTesting protected final Set<Hash> unprofitableCache = new LinkedHashSet<>();
+  protected final Map<Phase, Double> lastBlockMinRatios = new EnumMap<>(Phase.class);
+  protected final Map<Phase, Double> lastBlockMaxRatios = new EnumMap<>(Phase.class);
 
   static {
     resetMinMaxRatios();

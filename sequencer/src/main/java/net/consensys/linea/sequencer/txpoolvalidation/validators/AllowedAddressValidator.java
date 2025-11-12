@@ -14,8 +14,11 @@
  */
 package net.consensys.linea.sequencer.txpoolvalidation.validators;
 
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +33,8 @@ import org.hyperledger.besu.plugin.services.txvalidator.PluginTransactionPoolVal
 @Slf4j
 @RequiredArgsConstructor
 public class AllowedAddressValidator implements PluginTransactionPoolValidator {
-  private static final Set<Address> PRECOMPILES =
+  // 基础预编译地址集
+  private static final Set<Address> BASE_PRECOMPILES =
       Set.of(
           Address.fromHexString("0x0000000000000000000000000000000000000001"),
           Address.fromHexString("0x0000000000000000000000000000000000000002"),
@@ -42,6 +46,33 @@ public class AllowedAddressValidator implements PluginTransactionPoolValidator {
           Address.fromHexString("0x0000000000000000000000000000000000000008"),
           Address.fromHexString("0x0000000000000000000000000000000000000009"),
           Address.fromHexString("0x000000000000000000000000000000000000000a"));
+  
+  // 可配置的预编译地址集，允许通过配置扩展
+  private final Set<Address> additionalPrecompiles;
+  
+  // 合并基础预编译和额外预编译地址
+  private final Set<Address> precompiles;
+  
+  public AllowedAddressValidator(final Set<Address> denied) {
+    this.denied = denied;
+    // 默认无额外预编译地址
+    this.additionalPrecompiles = Collections.emptySet();
+    this.precompiles = Collections.unmodifiableSet(
+        Stream.concat(BASE_PRECOMPILES.stream(), additionalPrecompiles.stream())
+            .collect(Collectors.toSet()));
+  }
+  
+  // 支持自定义预编译地址的构造函数
+  public AllowedAddressValidator(final Set<Address> denied, final Set<Address> additionalPrecompiles) {
+    this.denied = denied;
+    this.additionalPrecompiles = additionalPrecompiles != null ? additionalPrecompiles : Collections.emptySet();
+    this.precompiles = Collections.unmodifiableSet(
+        Stream.concat(BASE_PRECOMPILES.stream(), this.additionalPrecompiles.stream())
+            .collect(Collectors.toSet()));
+    if (!this.additionalPrecompiles.isEmpty()) {
+      log.info("Added {} additional precompile addresses to validator", this.additionalPrecompiles.size());
+    }
+  }
 
   private final Set<Address> denied;
 
@@ -61,9 +92,9 @@ public class AllowedAddressValidator implements PluginTransactionPoolValidator {
                 to);
         log.debug(errMsg);
         return Optional.of(errMsg);
-      } else if (PRECOMPILES.contains(to)) {
+      } else if (precompiles.contains(to)) {
         final String errMsg =
-            "destination address is a precompile address and cannot receive transactions";
+            String.format("destination address %s is a precompile address and cannot receive transactions", to);
         log.debug(errMsg);
         return Optional.of(errMsg);
       }

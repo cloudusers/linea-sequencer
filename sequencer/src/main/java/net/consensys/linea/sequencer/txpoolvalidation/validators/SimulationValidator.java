@@ -84,36 +84,44 @@ public class SimulationValidator implements PluginTransactionPoolValidator {
           .addArgument(hasPriority)
           .log();
 
-      final ModuleLineCountValidator moduleLineCountValidator =
-          new ModuleLineCountValidator(moduleLineLimitsMap);
-      final var pendingBlockHeader = transactionSimulationService.simulatePendingBlockHeader();
+      try {
+        final ModuleLineCountValidator moduleLineCountValidator =
+            new ModuleLineCountValidator(moduleLineLimitsMap);
+        final var pendingBlockHeader = transactionSimulationService.simulatePendingBlockHeader();
 
-      final var zkTracer = createZkTracer(pendingBlockHeader, blockchainService.getChainId().get());
-      final var maybeSimulationResults =
-          transactionSimulationService.simulate(
-              transaction, Optional.empty(), pendingBlockHeader, zkTracer, false, true);
+        final var zkTracer = createZkTracer(pendingBlockHeader, blockchainService.getChainId().get());
+        final var maybeSimulationResults =
+            transactionSimulationService.simulate(
+                transaction, Optional.empty(), pendingBlockHeader, zkTracer, false, true);
 
-      ModuleLimitsValidationResult moduleLimitResult =
-          moduleLineCountValidator.validate(zkTracer.getModulesLineCount());
+        ModuleLimitsValidationResult moduleLimitResult =
+            moduleLineCountValidator.validate(zkTracer.getModulesLineCount());
 
-      logSimulationResult(
-          transaction, isLocal, hasPriority, maybeSimulationResults, moduleLimitResult);
+        logSimulationResult(
+            transaction, isLocal, hasPriority, maybeSimulationResults, moduleLimitResult);
 
-      if (moduleLimitResult.getResult() != ModuleLineCountValidator.ModuleLineCountResult.VALID) {
-        final String reason = handleModuleOverLimit(transaction, moduleLimitResult);
-        reportRejectedTransaction(transaction, reason);
-        return Optional.of(reason);
-      }
-
-      if (maybeSimulationResults.isPresent()) {
-        final var simulationResult = maybeSimulationResults.get();
-        if (simulationResult.isInvalid()) {
-          final String errMsg =
-              "Invalid transaction"
-                  + simulationResult.getInvalidReason().map(ir -> ": " + ir).orElse("");
-          log.debug(errMsg);
-          return Optional.of(errMsg);
+        if (moduleLimitResult.getResult() != ModuleLineCountValidator.ModuleLineCountResult.VALID) {
+          final String reason = handleModuleOverLimit(transaction, moduleLimitResult);
+          reportRejectedTransaction(transaction, reason);
+          return Optional.of(reason);
         }
+
+        if (maybeSimulationResults.isPresent()) {
+          final var simulationResult = maybeSimulationResults.get();
+          if (simulationResult.isInvalid()) {
+            final String errMsg =
+                "Invalid transaction"
+                    + simulationResult.getInvalidReason().map(ir -> ": " + ir).orElse("");
+            log.debug(errMsg);
+            return Optional.of(errMsg);
+          }
+        }
+      } catch (Exception e) {
+        final String errMsg = String.format("Transaction simulation failed with error: %s", e.getMessage());
+        log.warn("Error during transaction simulation for hash={}: {}", transaction.getHash(), e.getMessage(), e);
+        // 出于安全考虑，在模拟失败时拒绝交易
+        reportRejectedTransaction(transaction, errMsg);
+        return Optional.of("Transaction simulation error");
       }
     } else {
       log.atTrace()
